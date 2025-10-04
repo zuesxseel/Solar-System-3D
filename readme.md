@@ -1,8 +1,35 @@
-# 3D Solar System in THREE.js
+# 3D Solar System with AI Planet Generation
 
-Welcome to the **3D Solar System** project, a dynamic and interactive simulation of our solar system created using THREE.js and the Vite framework. This project showcases various advanced features and effects to provide an immersive experience of the celestial bodies in our solar system. The project is fully created by Karol Fryc.
+Welcome to the **Enhanced 3D Solar System** project, a dynamic and interactive simulation of our solar system created using THREE.js and the Vite framework. This enhanced version includes AI-powered planet generation capabilities, allowing users to create custom planets using text descriptions and see them rendered in real-time 3D.
 
-Overview available at: https://w21030911.nuwebspace.co.uk/graphics/assessment/
+## 🚀 New Features
+
+### AI-Powered Planet Generation
+- **Custom Planet Creation**: Generate unique planets using text descriptions
+- **Real-time 3D Rendering**: See your generated planets in the 3D solar system
+- **Multiple Texture Types**: Generate surface textures, bump maps, and atmospheric effects
+- **Interactive Chatbot**: AI assistant to help learn about planets and space
+- **Hugging Face Integration**: Uses Stable Diffusion for high-quality planet textures
+
+### Exoplanet Database Integration
+- **Real Exoplanet Data**: Load and display actual NASA exoplanet data
+- **Interactive Data Table**: Browse 5 rows of key planetary data
+- **Copy-Paste Functionality**: Copy planet data directly to clipboard
+- **One-Click Generation**: Generate 3D planets from real exoplanet data
+- **Smart Data Processing**: Automatically determines planet types from scientific data
+
+### Enhanced User Experience
+- **Planet Generator Panel**: Easy-to-use interface for creating custom planets
+- **Preview System**: See generated textures before applying to 3D spheres
+- **Custom Planet Library**: Save and manage your generated planets
+- **Real-time Integration**: Add custom planets to the existing solar system
+
+## 📚 Original Project Credits
+
+This project is based on the original **3D Solar System in THREE.js** by Karol Fryc, available under the MIT License. The original project provided the foundation for the 3D rendering functionality.
+
+**Original Project**: https://w21030911.nuwebspace.co.uk/graphics/assessment/
+**License**: MIT License (see LICENSE file)
 
 ![Solar_System](images/solar_system.png)
 

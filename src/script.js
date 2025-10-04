@@ -6,6 +6,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
+import { API_CONFIG, createEnhancedPrompt, callHuggingFaceAPI } from './api-config.js';
 
 import bgTexture1 from '/images/1.jpg';
 import bgTexture2 from '/images/2.jpg';
@@ -733,6 +734,16 @@ asteroids.forEach(asteroid => {
   asteroid.position.z = asteroid.position.z * Math.cos(0.0001 * settings.accelerationOrbit) - asteroid.position.x * Math.sin(0.0001 * settings.accelerationOrbit);
 });
 
+// Animate custom planets (if any exist)
+if (window.customPlanets) {
+  window.customPlanets.forEach(customPlanet => {
+    if (customPlanet && customPlanet.planet) {
+      customPlanet.planet.rotateY(0.005 * settings.acceleration);
+      customPlanet.planet3d.rotateY(0.0001 * settings.accelerationOrbit);
+    }
+  });
+}
+
 // ****** OUTLINES ON PLANETS ******
 raycaster.setFromCamera(mouse, camera);
 
@@ -781,6 +792,1050 @@ if (isMovingTowardsPlanet) {
 loadAsteroids('/asteroids/asteroidPack.glb', 1000, 130, 160);
 loadAsteroids('/asteroids/asteroidPack.glb', 3000, 352, 370);
 animate();
+
+// ******  CHATBOT FUNCTIONALITY  ******
+class SolarSystemChatbot {
+  constructor() {
+    console.log('Chatbot constructor called');
+    
+    // Get elements with debugging
+    this.container = document.getElementById('chatbot-container');
+    this.toggle = document.getElementById('chatbot-toggle');
+    this.content = document.getElementById('chatbot-content');
+    this.messages = document.getElementById('chatbot-messages');
+    this.input = document.getElementById('chatbot-input');
+    this.sendButton = document.getElementById('chatbot-send');
+    
+    // Debug element selection
+    console.log('Container found:', !!this.container);
+    console.log('Toggle found:', !!this.toggle);
+    console.log('Content found:', !!this.content);
+    console.log('Messages found:', !!this.messages);
+    console.log('Input found:', !!this.input);
+    console.log('Send button found:', !!this.sendButton);
+    
+    // Check if all required elements exist
+    if (!this.container || !this.toggle || !this.content || !this.messages || !this.input || !this.sendButton) {
+      console.error('Missing required elements for chatbot');
+      return;
+    }
+    
+    this.isCollapsed = false;
+    this.conversationHistory = [];
+    
+    this.initializeEventListeners();
+    this.addWelcomeMessage();
+    
+    console.log('Chatbot initialized successfully');
+  }
+  
+  initializeEventListeners() {
+    console.log('Initializing event listeners...');
+    
+    // Toggle chatbot
+    if (this.toggle) {
+      this.toggle.addEventListener('click', () => {
+        console.log('Toggle clicked');
+        this.toggleChatbot();
+      });
+    }
+    
+    // Send message
+    if (this.sendButton) {
+      this.sendButton.addEventListener('click', () => {
+        console.log('Send button clicked');
+        this.sendMessage();
+      });
+    }
+    
+    if (this.input) {
+      // Make input clickable and focusable
+      this.input.style.pointerEvents = 'auto';
+      this.input.style.cursor = 'text';
+      
+      this.input.addEventListener('keypress', (e) => {
+        console.log('Key pressed in input:', e.key);
+        if (e.key === 'Enter') {
+          console.log('Enter key pressed, sending message');
+          this.sendMessage();
+        }
+      });
+      
+      // Also add focus event for debugging
+      this.input.addEventListener('focus', () => {
+        console.log('Input focused');
+      });
+      
+      this.input.addEventListener('blur', () => {
+        console.log('Input blurred');
+      });
+      
+      // Add click to focus
+      this.input.addEventListener('click', () => {
+        console.log('Input clicked, focusing');
+        this.input.focus();
+      });
+      
+      // Test if input is working
+      console.log('Input element properties:', {
+        disabled: this.input.disabled,
+        readOnly: this.input.readOnly,
+        style: this.input.style.display,
+        value: this.input.value
+      });
+    }
+    
+    // Header click to toggle
+    const header = document.querySelector('.chatbot-header');
+    if (header) {
+      header.addEventListener('click', () => {
+        console.log('Header clicked');
+        this.toggleChatbot();
+      });
+    }
+    
+    console.log('Event listeners initialized');
+  }
+  
+  toggleChatbot() {
+    this.isCollapsed = !this.isCollapsed;
+    this.container.classList.toggle('collapsed', this.isCollapsed);
+    this.toggle.textContent = this.isCollapsed ? '+' : '−';
+  }
+  
+  addWelcomeMessage() {
+    const welcomeMessage = "Hello! I'm your Solar System Assistant. Ask me about planets, space facts, or anything related to our solar system! 🌌";
+    this.addMessage(welcomeMessage, 'bot');
+  }
+  
+  addMessage(text, sender) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `chatbot-message ${sender}`;
+    messageDiv.textContent = text;
+    
+    this.messages.appendChild(messageDiv);
+    this.messages.scrollTop = this.messages.scrollHeight;
+    
+    // Store in conversation history
+    this.conversationHistory.push({ text, sender, timestamp: Date.now() });
+  }
+  
+  async sendMessage() {
+    console.log('sendMessage called');
+    
+    if (!this.input) {
+      console.error('Input element not found');
+      return;
+    }
+    
+    const message = this.input.value.trim();
+    console.log('Message to send:', message);
+    
+    if (!message) {
+      console.log('Empty message, not sending');
+      return;
+    }
+    
+    // Add user message
+    this.addMessage(message, 'user');
+    this.input.value = '';
+    
+    // Show typing indicator
+    this.showTypingIndicator();
+    
+    // Generate bot response
+    const response = await this.generateResponse(message);
+    
+    // Remove typing indicator and add response
+    this.hideTypingIndicator();
+    this.addMessage(response, 'bot');
+    
+    console.log('Message sent successfully');
+  }
+  
+  showTypingIndicator() {
+    const typingDiv = document.createElement('div');
+    typingDiv.className = 'chatbot-message bot typing-indicator';
+    typingDiv.innerHTML = '<span>🤖 Assistant is typing...</span>';
+    typingDiv.id = 'typing-indicator';
+    this.messages.appendChild(typingDiv);
+    this.messages.scrollTop = this.messages.scrollHeight;
+  }
+  
+  hideTypingIndicator() {
+    const typingIndicator = document.getElementById('typing-indicator');
+    if (typingIndicator) {
+      typingIndicator.remove();
+    }
+  }
+  
+  async generateResponse(userMessage) {
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+    
+    const message = userMessage.toLowerCase();
+    
+    // Planet-specific responses
+    if (message.includes('mercury')) {
+      return "Mercury is the smallest planet in our solar system and closest to the Sun! It has extreme temperature variations and no atmosphere. Click on Mercury in the 3D view to learn more! 🪐";
+    }
+    
+    if (message.includes('venus')) {
+      return "Venus is often called Earth's twin due to similar size, but it has a thick, toxic atmosphere and is the hottest planet in our solar system! 🌟";
+    }
+    
+    if (message.includes('earth')) {
+      return "Earth is our home planet - the only known planet with life! It has liquid water, a protective atmosphere, and the perfect distance from the Sun. 🌍";
+    }
+    
+    if (message.includes('mars')) {
+      return "Mars is known as the Red Planet due to iron oxide on its surface. It has two small moons (Phobos and Deimos) and is a target for future human exploration! 🔴";
+    }
+    
+    if (message.includes('jupiter')) {
+      return "Jupiter is the largest planet in our solar system! It's a gas giant with a Great Red Spot storm and over 95 known moons, including the four largest: Io, Europa, Ganymede, and Callisto! 🪐";
+    }
+    
+    if (message.includes('saturn')) {
+      return "Saturn is famous for its beautiful ring system! It's a gas giant with 146 known moons and is less dense than water - it would float! 💍";
+    }
+    
+    if (message.includes('uranus')) {
+      return "Uranus is unique because it rotates on its side! It's an ice giant with a pale blue color and faint rings. It takes 84 Earth years to orbit the Sun! 🔵";
+    }
+    
+    if (message.includes('neptune')) {
+      return "Neptune is the most distant planet from the Sun and has the strongest winds in the solar system - up to 1,200 mph! It's a deep blue ice giant. 💙";
+    }
+    
+    if (message.includes('pluto')) {
+      return "Pluto is now classified as a dwarf planet, but it's still fascinating! It has a heart-shaped glacier and takes 248 Earth years to orbit the Sun. ❤️";
+    }
+    
+    // General space questions
+    if (message.includes('sun') || message.includes('star')) {
+      return "The Sun is our star - a massive ball of hot plasma that provides energy for life on Earth! It's about 4.6 billion years old and will continue shining for billions more years. ☀️";
+    }
+    
+    if (message.includes('moon')) {
+      return "The Moon is Earth's only natural satellite! It affects our tides and has been visited by humans. Mars has two small moons: Phobos and Deimos. 🌙";
+    }
+    
+    if (message.includes('asteroid')) {
+      return "Asteroids are rocky objects that orbit the Sun, mostly found in the asteroid belt between Mars and Jupiter. You can see them in the 3D view! 🪨";
+    }
+    
+    if (message.includes('orbit') || message.includes('revolve')) {
+      return "All planets orbit the Sun in elliptical paths! The closer planets orbit faster - Mercury takes 88 days while Neptune takes 165 years! You can see the orbital paths in the 3D view. 🌀";
+    }
+    
+    if (message.includes('rotation') || message.includes('spin')) {
+      return "Planets rotate on their axes while orbiting the Sun! Earth takes 24 hours to rotate, while Jupiter rotates in just 10 hours! You can see the rotation in the 3D view. 🌪️";
+    }
+    
+    if (message.includes('atmosphere')) {
+      return "Atmospheres are layers of gases around planets. Earth has a protective atmosphere with oxygen, while Venus has a thick, toxic atmosphere. You can see atmospheric effects in the 3D view! 🌫️";
+    }
+    
+    if (message.includes('temperature') || message.includes('hot') || message.includes('cold')) {
+      return "Planet temperatures vary greatly! Mercury has extreme temperature swings, Venus is the hottest due to greenhouse effect, while Neptune is very cold at -200°C! 🌡️";
+    }
+    
+    if (message.includes('size') || message.includes('big') || message.includes('small')) {
+      return "Planets vary greatly in size! Jupiter is 11 times wider than Earth, while Mercury is only 38% of Earth's size. You can see the size differences in the 3D view! 📏";
+    }
+    
+    if (message.includes('distance') || message.includes('far') || message.includes('close')) {
+      return "Planets are at different distances from the Sun! Mercury is closest at 58 million km, while Neptune is 4.5 billion km away. The distances in the 3D view are scaled down for visibility! 📏";
+    }
+    
+    if (message.includes('life') || message.includes('living')) {
+      return "So far, Earth is the only planet known to have life! Scientists are searching for signs of life on Mars and moons like Europa, which might have liquid water under its icy surface. 🧬";
+    }
+    
+    if (message.includes('explore') || message.includes('mission') || message.includes('spacecraft')) {
+      return "We've sent many spacecraft to explore our solar system! From the Mars rovers to the Voyager missions that are now in interstellar space. The 3D view shows our current understanding! 🚀";
+    }
+    
+    if (message.includes('help') || message.includes('what can you do')) {
+      return "I can help you learn about planets, space facts, and the solar system! Try asking about specific planets, ask about orbits, atmospheres, or just explore the 3D solar system by clicking on planets! 🪐✨";
+    }
+    
+    // Test responses for debugging
+    if (message.includes('test') || message.includes('hello') || message.includes('hi')) {
+      return "Hello! The chatbot is working perfectly! 🎉 You can ask me about any planet or space topic!";
+    }
+    
+    if (message.includes('debug') || message.includes('status')) {
+      return "Chatbot Status: ✅ Working! I can answer questions about planets, space, and the solar system. Try asking about Mercury, Earth, or Jupiter!";
+    }
+    
+    // Default responses
+    const defaultResponses = [
+      "That's an interesting question about space! Try asking about specific planets or space phenomena. I'm here to help! 🌌",
+      "I love talking about space! Ask me about planets, moons, orbits, or anything related to our solar system! 🚀",
+      "The solar system is fascinating! Click on planets in the 3D view to learn more, or ask me specific questions! 🌟",
+      "There's so much to explore in our solar system! What would you like to know about? 🪐",
+      "I'm here to help you learn about space! Try asking about planets, their properties, or how they move! 🌌"
+    ];
+    
+    return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
+  }
+}
+
+// Initialize chatbot when the page loads
+let chatbot;
+
+function initializeChatbot() {
+  if (!chatbot && document.getElementById('chatbot-container')) {
+    console.log('Initializing Solar System Chatbot...');
+    try {
+      chatbot = new SolarSystemChatbot();
+      console.log('Chatbot initialized successfully!');
+    } catch (error) {
+      console.error('Error initializing chatbot:', error);
+    }
+  } else if (!document.getElementById('chatbot-container')) {
+    console.log('Chatbot container not found, retrying...');
+  }
+}
+
+// Try multiple initialization methods
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(initializeChatbot, 100);
+  });
+} else {
+  // DOM is already loaded
+  setTimeout(initializeChatbot, 100);
+}
+
+// Also try after a longer delay as fallback
+setTimeout(initializeChatbot, 1000);
+
+// Global function to test chatbot manually
+window.testChatbot = function() {
+  if (chatbot) {
+    console.log('Chatbot is available:', chatbot);
+    chatbot.addMessage('Test message from console', 'user');
+    chatbot.addMessage('This is a test response!', 'bot');
+  } else {
+    console.log('Chatbot not initialized yet. Trying to initialize...');
+    initializeChatbot();
+  }
+};
+
+// Global function to test input directly
+window.testInput = function() {
+  if (chatbot && chatbot.input) {
+    console.log('Testing input element...');
+    chatbot.input.focus();
+    chatbot.input.value = 'Test message';
+    console.log('Input value set to:', chatbot.input.value);
+    chatbot.sendMessage();
+  } else {
+    console.log('Chatbot or input not available');
+  }
+};
+
+// Global function to check chatbot status
+window.checkChatbot = function() {
+  console.log('Chatbot status check:');
+  console.log('- Chatbot object:', !!chatbot);
+  console.log('- Container:', !!document.getElementById('chatbot-container'));
+  console.log('- Input:', !!document.getElementById('chatbot-input'));
+  console.log('- Send button:', !!document.getElementById('chatbot-send'));
+  console.log('- Messages:', !!document.getElementById('chatbot-messages'));
+  
+  if (chatbot) {
+    console.log('- Input element:', chatbot.input);
+    console.log('- Input disabled:', chatbot.input?.disabled);
+    console.log('- Input readOnly:', chatbot.input?.readOnly);
+  }
+};
+
+// ******  PLANET GENERATOR FUNCTIONALITY  ******
+class PlanetGenerator {
+  constructor() {
+    this.container = document.getElementById('planet-generator');
+    this.toggle = document.getElementById('generator-toggle');
+    this.content = document.getElementById('generator-content');
+    this.form = document.querySelector('.generator-form');
+    this.status = document.getElementById('generation-status');
+    this.preview = document.getElementById('planet-preview');
+    
+    this.isCollapsed = false;
+    this.currentPlanet = null;
+    this.generatedTextures = {};
+    
+    this.initializeEventListeners();
+  }
+  
+  initializeEventListeners() {
+    // Toggle generator
+    this.toggle.addEventListener('click', () => this.toggleGenerator());
+    
+    // Header click to toggle
+    document.querySelector('.generator-header').addEventListener('click', () => this.toggleGenerator());
+    
+    // Size slider
+    const sizeSlider = document.getElementById('planet-size');
+    const sizeValue = document.getElementById('size-value');
+    sizeSlider.addEventListener('input', (e) => {
+      sizeValue.textContent = e.target.value;
+    });
+    
+    // Generate planet button
+    document.getElementById('generate-planet').addEventListener('click', () => this.generatePlanet());
+    
+    // Regenerate button
+    document.getElementById('regenerate-planet').addEventListener('click', () => this.generatePlanet());
+    
+    // Add to solar system button
+    document.getElementById('add-to-solar-system').addEventListener('click', () => this.addToSolarSystem());
+  }
+  
+  toggleGenerator() {
+    this.isCollapsed = !this.isCollapsed;
+    this.container.classList.toggle('collapsed', this.isCollapsed);
+    this.toggle.textContent = this.isCollapsed ? '+' : '−';
+  }
+  
+  async generatePlanet() {
+    const description = document.getElementById('planet-description').value.trim();
+    const planetType = document.getElementById('planet-type').value;
+    const size = parseInt(document.getElementById('planet-size').value);
+    const includeAtmosphere = document.getElementById('atmosphere').checked;
+    const includeBumpMap = document.getElementById('bump-map').checked;
+    
+    if (!description) {
+      alert('Please enter a planet description!');
+      return;
+    }
+    
+    // Show loading state
+    this.showLoading();
+    
+    try {
+      // Generate enhanced prompt
+      const enhancedPrompt = this.createEnhancedPrompt(description, planetType);
+      
+      // Generate textures
+      const textures = await this.generateTextures(enhancedPrompt, {
+        includeAtmosphere,
+        includeBumpMap
+      });
+      
+      // Store generated textures
+      this.generatedTextures = textures;
+      
+      // Show preview
+      this.showPreview(textures);
+      
+    } catch (error) {
+      console.error('Error generating planet:', error);
+      alert('Error generating planet. Please try again.');
+      this.hideLoading();
+    }
+  }
+  
+  createEnhancedPrompt(description, planetType) {
+    return createEnhancedPrompt(description, planetType, 'surface');
+  }
+  
+  async generateTextures(prompt, options) {
+    const textures = {};
+    
+    // Generate main surface texture
+    console.log('Generating surface texture...');
+    textures.surface = await callHuggingFaceAPI(prompt);
+    
+    // Generate bump map if requested
+    if (options.includeBumpMap) {
+      console.log('Generating bump map...');
+      const description = document.getElementById('planet-description').value.trim();
+      const planetType = document.getElementById('planet-type').value;
+      const bumpPrompt = createEnhancedPrompt(description, planetType, 'bump');
+      textures.bump = await callHuggingFaceAPI(bumpPrompt);
+    }
+    
+    // Generate atmosphere if requested
+    if (options.includeAtmosphere) {
+      console.log('Generating atmosphere...');
+      const description = document.getElementById('planet-description').value.trim();
+      const planetType = document.getElementById('planet-type').value;
+      const atmospherePrompt = createEnhancedPrompt(description, planetType, 'atmosphere');
+      textures.atmosphere = await callHuggingFaceAPI(atmospherePrompt);
+    }
+    
+    return textures;
+  }
+  
+  
+  showLoading() {
+    this.form.style.display = 'none';
+    this.preview.style.display = 'none';
+    this.status.style.display = 'block';
+  }
+  
+  hideLoading() {
+    this.status.style.display = 'none';
+    this.form.style.display = 'flex';
+  }
+  
+  showPreview(textures) {
+    this.hideLoading();
+    
+    // Show surface texture
+    document.getElementById('surface-preview').src = textures.surface;
+    
+    // Show bump map if available
+    if (textures.bump) {
+      document.getElementById('bump-preview').src = textures.bump;
+      document.getElementById('bump-preview-container').style.display = 'block';
+    } else {
+      document.getElementById('bump-preview-container').style.display = 'none';
+    }
+    
+    // Show atmosphere if available
+    if (textures.atmosphere) {
+      document.getElementById('atmosphere-preview').src = textures.atmosphere;
+      document.getElementById('atmosphere-preview-container').style.display = 'block';
+    } else {
+      document.getElementById('atmosphere-preview-container').style.display = 'none';
+    }
+    
+    this.preview.style.display = 'block';
+  }
+  
+  addToSolarSystem() {
+    if (!this.generatedTextures.surface) {
+      alert('No planet generated yet!');
+      return;
+    }
+    
+    const description = document.getElementById('planet-description').value.trim();
+    const size = parseInt(document.getElementById('planet-size').value);
+    
+    // Create custom planet
+    const customPlanet = this.createCustomPlanet(description, size, this.generatedTextures);
+    
+    // Add to scene
+    scene.add(customPlanet.planet3d);
+    
+    // Add to raycast targets for interaction
+    raycastTargets.push(customPlanet.planet);
+    
+    // Track custom planets for animation
+    if (!window.customPlanets) {
+      window.customPlanets = [];
+    }
+    window.customPlanets.push(customPlanet);
+    
+    // Show success message
+    alert('Custom planet added to solar system! Click on it to interact.');
+    
+    console.log('Custom planet added:', customPlanet);
+  }
+  
+  createCustomPlanet(name, size, textures) {
+    // Create material with generated texture
+    const material = new THREE.MeshPhongMaterial({
+      map: loadTexture.load(textures.surface),
+      bumpMap: textures.bump ? loadTexture.load(textures.bump) : null,
+      bumpScale: 0.7
+    });
+    
+    // Create planet geometry and mesh
+    const geometry = new THREE.SphereGeometry(size, 32, 20);
+    const planet = new THREE.Mesh(geometry, material);
+    
+    // Create planet system
+    const planet3d = new THREE.Object3D();
+    const planetSystem = new THREE.Group();
+    planetSystem.add(planet);
+    
+    // Position planet outside the solar system
+    planet.position.x = 400; // Far from other planets
+    planet.position.y = Math.random() * 20 - 10; // Random height
+    planet.position.z = Math.random() * 20 - 10; // Random depth
+    
+    // Add atmosphere if available
+    let atmosphere = null;
+    if (textures.atmosphere) {
+      const atmosphereGeom = new THREE.SphereGeometry(size + 0.1, 32, 20);
+      const atmosphereMaterial = new THREE.MeshPhongMaterial({
+        map: loadTexture.load(textures.atmosphere),
+        transparent: true,
+        opacity: 0.4,
+        depthTest: true,
+        depthWrite: false
+      });
+      atmosphere = new THREE.Mesh(atmosphereGeom, atmosphereMaterial);
+      planet.add(atmosphere);
+    }
+    
+    // Add orbit path
+    const orbitPath = new THREE.EllipseCurve(
+      0, 0,
+      400, 400,
+      0, 2 * Math.PI,
+      false,
+      0
+    );
+    
+    const pathPoints = orbitPath.getPoints(100);
+    const orbitGeometry = new THREE.BufferGeometry().setFromPoints(pathPoints);
+    const orbitMaterial = new THREE.LineBasicMaterial({ 
+      color: 0xFFD700, 
+      transparent: true, 
+      opacity: 0.1 
+    });
+    const orbit = new THREE.LineLoop(orbitGeometry, orbitMaterial);
+    orbit.rotation.x = Math.PI / 2;
+    planetSystem.add(orbit);
+    
+    // Add to planet system
+    planet3d.add(planetSystem);
+    
+    // Enable shadows
+    planet.castShadow = true;
+    planet.receiveShadow = true;
+    if (atmosphere) {
+      atmosphere.castShadow = true;
+      atmosphere.receiveShadow = true;
+    }
+    
+    return {
+      name: name || 'Custom Planet',
+      planet,
+      planet3d,
+      atmosphere,
+      planetSystem
+    };
+  }
+}
+
+// ******  EXOPLANET DATA TABLE FUNCTIONALITY  ******
+class ExoplanetDataTable {
+  constructor() {
+    this.container = document.getElementById('exoplanet-data');
+    this.toggle = document.getElementById('data-toggle');
+    this.content = document.getElementById('data-content');
+    this.searchInput = document.getElementById('data-search');
+    this.loadButton = document.getElementById('load-data');
+    this.tableBody = document.getElementById('exoplanet-tbody');
+    
+    this.isCollapsed = false;
+    this.exoplanetData = [];
+    this.filteredData = [];
+    
+    this.initializeEventListeners();
+  }
+  
+  initializeEventListeners() {
+    // Toggle data table
+    this.toggle.addEventListener('click', () => this.toggleDataTable());
+    
+    // Header click to toggle
+    document.querySelector('.data-header').addEventListener('click', () => this.toggleDataTable());
+    
+    // Load data button
+    this.loadButton.addEventListener('click', () => this.loadExoplanetData());
+    
+    
+    // Search functionality
+    this.searchInput.addEventListener('input', (e) => this.filterData(e.target.value));
+  }
+  
+  toggleDataTable() {
+    this.isCollapsed = !this.isCollapsed;
+    this.container.classList.toggle('collapsed', this.isCollapsed);
+    this.toggle.textContent = this.isCollapsed ? '+' : '−';
+  }
+  
+  async loadExoplanetData() {
+    try {
+      this.loadButton.textContent = '⏳ Loading...';
+      this.loadButton.disabled = true;
+      
+      console.log('Loading exoplanet data...');
+      
+      // Load CSV data
+      const response = await fetch('/data/cumulative_2025.10.04_03.20.55.csv');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const csvText = await response.text();
+      console.log('CSV data loaded, length:', csvText.length);
+      
+      // Parse CSV data
+      this.exoplanetData = this.parseCSV(csvText);
+      console.log('Parsed exoplanet data:', this.exoplanetData.length, 'rows');
+      
+      this.filteredData = [...this.exoplanetData];
+      
+      // Display first 5 rows
+      this.displayData();
+      
+      this.loadButton.textContent = '✅ Loaded';
+      setTimeout(() => {
+        this.loadButton.textContent = '📊 Load Data';
+        this.loadButton.disabled = false;
+      }, 2000);
+      
+    } catch (error) {
+      console.error('Error loading exoplanet data:', error);
+      this.loadButton.textContent = 'Error';
+      alert(`Failed to load data: ${error.message}`);
+      setTimeout(() => {
+        this.loadButton.textContent = 'Load Data';
+        this.loadButton.disabled = false;
+      }, 2000);
+    }
+  }
+  
+  
+  parseCSV(csvText) {
+    const lines = csvText.split('\n');
+    const data = [];
+    
+    // Find the header line (first line that doesn't start with #)
+    let headerLine = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (!lines[i].startsWith('#') && lines[i].trim()) {
+        headerLine = i;
+        break;
+      }
+    }
+    
+    if (headerLine === -1) return [];
+    
+    const headers = lines[headerLine].split(',').map(h => h.trim());
+    
+    // Parse data rows
+    for (let i = headerLine + 1; i < Math.min(headerLine + 6, lines.length); i++) {
+      if (lines[i].trim()) {
+        const values = this.parseCSVLine(lines[i]);
+        if (values.length >= headers.length) {
+          const row = {};
+          headers.forEach((header, index) => {
+            row[header] = values[index] || '';
+          });
+          data.push(row);
+        }
+      }
+    }
+    
+    return data;
+  }
+  
+  parseCSVLine(line) {
+    const values = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        values.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    
+    values.push(current.trim());
+    return values;
+  }
+  
+  displayData() {
+    this.tableBody.innerHTML = '';
+    
+    if (this.filteredData.length === 0) {
+      this.tableBody.innerHTML = '<tr><td colspan="6" class="no-data">No data found</td></tr>';
+      return;
+    }
+    
+    this.filteredData.forEach((planet, index) => {
+      const row = document.createElement('tr');
+      
+      // Extract key data
+      const name = planet.kepler_name || planet.kepoi_name || `Planet ${index + 1}`;
+      const radius = planet.koi_prad || 'N/A';
+      const temperature = planet.koi_teq || 'N/A';
+      const period = planet.koi_period || 'N/A';
+      const stellarTemp = parseFloat(planet.koi_steff) || 0;
+      
+      // Determine star type for display
+      let starType = 'N/A';
+      if (stellarTemp > 0) {
+        if (stellarTemp > 10000) starType = 'Blue Supergiant';
+        else if (stellarTemp > 7500) starType = 'Blue Star';
+        else if (stellarTemp > 6000) starType = 'White Star';
+        else if (stellarTemp > 5000) starType = 'Yellow Star';
+        else if (stellarTemp > 4000) starType = 'Orange Star';
+        else starType = 'Red Star';
+        starType += ` (${stellarTemp}K)`;
+      }
+      
+      row.innerHTML = `
+        <td title="${name}">${name.length > 15 ? name.substring(0, 15) + '...' : name}</td>
+        <td>${radius}</td>
+        <td>${temperature}</td>
+        <td>${period}</td>
+        <td title="${starType}">${starType.length > 20 ? starType.substring(0, 20) + '...' : starType}</td>
+        <td>
+          <button class="copy-btn" onclick="exoplanetTable.copyPlanetData(${index})">📋 Copy</button>
+          <button class="generate-btn-small" onclick="exoplanetTable.generateFromPlanet(${index})">🌌 Generate</button>
+        </td>
+      `;
+      
+      this.tableBody.appendChild(row);
+    });
+  }
+  
+  filterData(searchTerm) {
+    if (!searchTerm.trim()) {
+      this.filteredData = [...this.exoplanetData];
+    } else {
+      this.filteredData = this.exoplanetData.filter(planet => {
+        const name = (planet.kepler_name || planet.kepoi_name || '').toLowerCase();
+        return name.includes(searchTerm.toLowerCase());
+      });
+    }
+    this.displayData();
+  }
+  
+  copyPlanetData(index) {
+    const planet = this.filteredData[index];
+    if (!planet) return;
+    
+    // Create a formatted description for planet generation
+    const name = planet.kepler_name || planet.kepoi_name || 'Unknown Planet';
+    const radius = planet.koi_prad || 'unknown';
+    const temperature = planet.koi_teq || 'unknown';
+    const period = planet.koi_period || 'unknown';
+    const stellarTemp = planet.koi_steff || 'unknown';
+    
+    const description = `${name}: Radius ${radius} Earth radii, Temperature ${temperature}K, Orbital Period ${period} days, Stellar Temperature ${stellarTemp}K`;
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(description).then(() => {
+      // Show success feedback
+      const button = event.target;
+      const originalText = button.textContent;
+      button.textContent = '✅ Copied!';
+      button.style.background = 'linear-gradient(135deg, #4CAF50, #66BB6A)';
+      
+      setTimeout(() => {
+        button.textContent = originalText;
+        button.style.background = '';
+      }, 1500);
+    }).catch(err => {
+      console.error('Failed to copy: ', err);
+      alert('Failed to copy to clipboard');
+    });
+  }
+  
+  generateFromPlanet(index) {
+    const planet = this.filteredData[index];
+    if (!planet) return;
+    
+    // Extract all available data
+    const name = planet.kepler_name || planet.kepoi_name || 'Unknown Planet';
+    const radius = parseFloat(planet.koi_prad) || 1;
+    const temperature = parseFloat(planet.koi_teq) || 300;
+    const stellarTemp = parseFloat(planet.koi_steff) || 5000;
+    const stellarRadius = parseFloat(planet.koi_srad) || 1;
+    const period = parseFloat(planet.koi_period) || 365;
+    const insolation = parseFloat(planet.koi_insol) || 1;
+    
+    // Calculate orbital distance using Kepler's laws (approximate)
+    const orbitalDistance = this.calculateOrbitalDistance(period, stellarRadius);
+    
+    // Determine planet type based on comprehensive data
+    const planetAnalysis = this.analyzePlanetType(radius, temperature, insolation, stellarTemp);
+    
+    // Create detailed description
+    let description = `${planetAnalysis.type} exoplanet with radius ${radius} Earth radii`;
+    
+    // Add temperature and distance characteristics
+    description += this.getTemperatureDescription(temperature, orbitalDistance);
+    
+    // Add stellar characteristics
+    description += this.getStellarDescription(stellarTemp, stellarRadius);
+    
+    // Add orbital characteristics
+    description += this.getOrbitalDescription(period, orbitalDistance);
+    
+    // Fill the planet generator form
+    if (planetGenerator) {
+      document.getElementById('planet-description').value = description;
+      document.getElementById('planet-type').value = planetAnalysis.planetType;
+      document.getElementById('planet-size').value = Math.min(10, Math.max(1, Math.round(radius)));
+      document.getElementById('size-value').textContent = Math.min(10, Math.max(1, Math.round(radius)));
+      
+      // Show detailed analysis
+      const analysisText = `
+Planet Analysis:
+• Type: ${planetAnalysis.type}
+• Size: ${radius} Earth radii (${planetAnalysis.sizeCategory})
+• Temperature: ${temperature}K (${planetAnalysis.tempCategory})
+• Distance: ~${orbitalDistance.toFixed(2)} AU
+• Star: ${stellarTemp}K (${planetAnalysis.starType})
+• Period: ${period} days
+      `.trim();
+      
+      alert(`Planet data loaded!\n\n${analysisText}`);
+    } else {
+      alert('Planet generator not available. Please try again.');
+    }
+  }
+  
+  calculateOrbitalDistance(period, stellarRadius) {
+    // Approximate calculation using Kepler's third law
+    // a^3 = P^2 * M (in AU and years)
+    // For simplicity, assuming solar mass star
+    const periodYears = period / 365.25;
+    const distance = Math.pow(periodYears * periodYears, 1/3);
+    return distance;
+  }
+  
+  analyzePlanetType(radius, temperature, insolation, stellarTemp) {
+    let type, planetType, sizeCategory, tempCategory, starType;
+    
+    // Determine planet type based on radius
+    if (radius > 6) {
+      type = 'Gas giant';
+      planetType = 'gas-giant';
+      sizeCategory = 'Very large';
+    } else if (radius > 4) {
+      type = 'Large gas giant';
+      planetType = 'gas-giant';
+      sizeCategory = 'Large';
+    } else if (radius > 2.5) {
+      type = 'Super-Earth';
+      planetType = 'rocky';
+      sizeCategory = 'Large rocky';
+    } else if (radius > 1.5) {
+      type = 'Large rocky planet';
+      planetType = 'rocky';
+      sizeCategory = 'Medium rocky';
+    } else if (radius > 0.8) {
+      type = 'Earth-sized rocky planet';
+      planetType = 'rocky';
+      sizeCategory = 'Earth-sized';
+    } else {
+      type = 'Small rocky planet';
+      planetType = 'rocky';
+      sizeCategory = 'Small rocky';
+    }
+    
+    // Determine temperature category
+    if (temperature > 1000) {
+      tempCategory = 'Extremely hot (molten/lava world)';
+    } else if (temperature > 500) {
+      tempCategory = 'Hot (scorched surface)';
+    } else if (temperature > 300) {
+      tempCategory = 'Warm (potentially habitable)';
+    } else if (temperature > 200) {
+      tempCategory = 'Cool (icy surface)';
+    } else {
+      tempCategory = 'Very cold (frozen world)';
+    }
+    
+    // Determine star type
+    if (stellarTemp > 10000) {
+      starType = 'Blue supergiant';
+    } else if (stellarTemp > 7500) {
+      starType = 'Blue star';
+    } else if (stellarTemp > 6000) {
+      starType = 'White star';
+    } else if (stellarTemp > 5000) {
+      starType = 'Yellow star (Sun-like)';
+    } else if (stellarTemp > 4000) {
+      starType = 'Orange star';
+    } else {
+      starType = 'Red star';
+    }
+    
+    return { type, planetType, sizeCategory, tempCategory, starType };
+  }
+  
+  getTemperatureDescription(temperature, orbitalDistance) {
+    if (temperature > 1000) {
+      return `, extremely hot molten surface at ${temperature}K (close to star at ~${orbitalDistance.toFixed(2)} AU)`;
+    } else if (temperature > 500) {
+      return `, hot scorched surface at ${temperature}K (close to star at ~${orbitalDistance.toFixed(2)} AU)`;
+    } else if (temperature > 300) {
+      return `, warm potentially habitable surface at ${temperature}K (moderate distance ~${orbitalDistance.toFixed(2)} AU)`;
+    } else if (temperature > 200) {
+      return `, cool icy surface at ${temperature}K (far from star at ~${orbitalDistance.toFixed(2)} AU)`;
+    } else {
+      return `, very cold frozen surface at ${temperature}K (very far from star at ~${orbitalDistance.toFixed(2)} AU)`;
+    }
+  }
+  
+  getStellarDescription(stellarTemp, stellarRadius) {
+    let starDesc = '';
+    
+    if (stellarTemp > 10000) {
+      starDesc = `, orbiting a massive blue supergiant star (${stellarTemp}K, ${stellarRadius} solar radii)`;
+    } else if (stellarTemp > 7500) {
+      starDesc = `, orbiting a hot blue star (${stellarTemp}K, ${stellarRadius} solar radii)`;
+    } else if (stellarTemp > 6000) {
+      starDesc = `, orbiting a white star (${stellarTemp}K, ${stellarRadius} solar radii)`;
+    } else if (stellarTemp > 5000) {
+      starDesc = `, orbiting a sun-like yellow star (${stellarTemp}K, ${stellarRadius} solar radii)`;
+    } else if (stellarTemp > 4000) {
+      starDesc = `, orbiting an orange star (${stellarTemp}K, ${stellarRadius} solar radii)`;
+    } else {
+      starDesc = `, orbiting a cool red star (${stellarTemp}K, ${stellarRadius} solar radii)`;
+    }
+    
+    return starDesc;
+  }
+  
+  getOrbitalDescription(period, orbitalDistance) {
+    if (period < 10) {
+      return `, with a very short ${period.toFixed(1)}-day orbit`;
+    } else if (period < 100) {
+      return `, with a short ${period.toFixed(1)}-day orbit`;
+    } else if (period < 1000) {
+      return `, with a moderate ${period.toFixed(1)}-day orbit`;
+    } else {
+      return `, with a long ${period.toFixed(1)}-day orbit`;
+    }
+  }
+}
+
+// Initialize exoplanet data table when the page loads
+let exoplanetTable;
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    if (document.getElementById('exoplanet-data')) {
+      exoplanetTable = new ExoplanetDataTable();
+      console.log('Exoplanet Data Table initialized');
+    }
+  }, 200);
+});
+
+// Initialize planet generator when the page loads
+let planetGenerator;
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    if (document.getElementById('planet-generator')) {
+      planetGenerator = new PlanetGenerator();
+      console.log('Planet Generator initialized');
+    }
+  }, 200);
+});
 
 window.addEventListener('mousemove', onMouseMove, false);
 window.addEventListener('mousedown', onDocumentMouseDown, false);
